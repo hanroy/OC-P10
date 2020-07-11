@@ -1,5 +1,5 @@
 # <div align="center"> [AIC] Projet N°10 : </div>
-# <p align="center"><img width=40% src="https://s19386.pcdn.co/wp-content/uploads/2018/10/Powered-by-AWS-logo.png"></p>
+# <p align="center"><img width=40% src="https://s3.us-east-2.amazonaws.com/albiladpress/eimages/news/2019/07/thumbnails/main/f30170535684.jpg"></p>
 # <div align="center"> Maîtrisez votre infrastructure cloud </div>
 
 
