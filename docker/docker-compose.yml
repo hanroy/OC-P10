@@ -1,0 +1,35 @@
+version: "3.7"
+services:
+    wordpress:
+        container_name: "aic_wordpress"
+        restart: always
+        build:
+            context: ./
+            dockerfile: ./Dockerfile
+        ports:
+                - "80:80"
+        environment:
+            WORDPRESS_DB_NAME: "$WORDPRESS_DB_NAME"
+            WORDPRESS_DB_HOST: "$WORDPRESS_DB_HOST"
+            WORDPRESS_DB_USER: "$WORDPRESS_DB_USER"
+            WORDPRESS_DB_PASSWORD: "$WORDPRESS_DB_PASSWORD"
+            WORDPRESS_CONFIG_EXTRA: |
+                define('FS_METHOD', 'direct');
+                define('AWS_ACCESS_KEY_ID','$AWS_ACCESS_KEY_ID');
+                define('AWS_SECRET_ACCESS_KEY','$AWS_SECRET_ACCESS_KEY');
+
+        volumes:
+            - "wordpress:/var/www/html"
+            - "./build/uploads:/var/www/html/wp-content/uploads:cached"
+            - "./build/plugins:/var/www/html/wp-content/plugins:cached"
+            - "./build/themes:/var/www/html/wp-content/themes:cached"
+    cli:
+        container_name: "aic_cli"
+        image: "wordpress:cli"
+        volumes:
+            - "wordpress:/var/www/html"
+            - "./build/plugins:/var/www/html/wp-content/plugins:cached"
+        depends_on:
+            - wordpress
+volumes:
+    wordpress: null
