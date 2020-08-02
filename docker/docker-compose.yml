@@ -9,10 +9,10 @@ services:
         ports:
                 - "80:80"
         environment:
-            WORDPRESS_DB_NAME: "$WORDPRESS_DB_NAME"
-            WORDPRESS_DB_HOST: "$WORDPRESS_DB_HOST"
-            WORDPRESS_DB_USER: "$WORDPRESS_DB_USER"
-            WORDPRESS_DB_PASSWORD: "$WORDPRESS_DB_PASSWORD"
+            WORDPRESS_DB_NAME: "$DbName"
+            WORDPRESS_DB_HOST: "$DbHOST"
+            WORDPRESS_DB_USER: "$DbUSER"
+            WORDPRESS_DB_PASSWORD: "$DbPASSWORD"
             WORDPRESS_CONFIG_EXTRA: |
                 define('FS_METHOD', 'direct');
                 define('AWS_ACCESS_KEY_ID','$AWS_ACCESS_KEY_ID');
