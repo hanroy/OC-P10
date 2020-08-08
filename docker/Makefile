@@ -15,6 +15,7 @@ configure:
 	wp --allow-root rewrite structure "/blog/%postname%/"
 	wp --allow-root plugin install wordpress-importer --activate
 	wp --allow-root plugin install amazon-web-services --activate
+	wp --allow-root plugin install amazon-s3-and-cloudfront --activate
 	wp --allow-root plugin update --all
 	wp --allow-root theme update --all
 	wp --allow-root theme activate twentynineteen
