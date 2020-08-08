@@ -1,10 +1,20 @@
-FROM wordpress:latest
+FROM wordpress:cli
 
-# Plugins & Media
-RUN  mkdir -p /var/www/html/wp-content/plugins
-RUN  mkdir -p /var/www/html/wp-content/uploads
+USER root
+RUN apk add --no-cache make
 
-RUN  chown -R www-data:www-data /var/www
+ENV WAIT_VERSION 2.7.2
+ADD https://github.com/ufoscout/docker-compose-wait/releases/download/$WAIT_VERSION/wait /wait
+RUN chmod +x /wait
 
-RUN  find /var/www/ -type d -exec chmod 0755 {} \;
-RUN  find /var/www/ -type f -exec chmod 644 {} \;
+
+
+ADD Makefile entrypoint.sh wpress.xml /scripts/
+RUN chmod +x /scripts/entrypoint.sh
+
+RUN chown -R www-data:www-data /var/www/html
+
+
+ENTRYPOINT [ "/scripts/entrypoint.sh" ]
+#USER 33:33
+CMD ["wp", "shell"]
