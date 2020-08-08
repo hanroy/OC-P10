@@ -1,35 +1,40 @@
-version: "3.7"
+version: '3.6'
 services:
-    wordpress:
-        container_name: "aic_wordpress"
-        restart: always
-        build:
-            context: ./
-            dockerfile: ./Dockerfile
-        ports:
-                - "80:80"
-        environment:
-            WORDPRESS_DB_NAME: "DbName"
-            WORDPRESS_DB_HOST: "DbHOST"
-            WORDPRESS_DB_USER: "DbUSER"
-            WORDPRESS_DB_PASSWORD: "DbPASSWORD"
-            WORDPRESS_CONFIG_EXTRA: |
-                define('FS_METHOD', 'direct');
-                define('AWS_ACCESS_KEY_ID','$AWS_ACCESS_KEY_ID');
-                define('AWS_SECRET_ACCESS_KEY','$AWS_SECRET_ACCESS_KEY');
 
-        volumes:
-            - "wordpress:/var/www/html"
-            - "./build/uploads:/var/www/html/wp-content/uploads:cached"
-            - "./build/plugins:/var/www/html/wp-content/plugins:cached"
-            - "./build/themes:/var/www/html/wp-content/themes:cached"
-    cli:
-        container_name: "aic_cli"
-        image: "wordpress:cli"
-        volumes:
-            - "wordpress:/var/www/html"
-            - "./build/plugins:/var/www/html/wp-content/plugins:cached"
-        depends_on:
-            - wordpress
-volumes:
-    wordpress: null
+  wordpress:
+    image: wordpress:latest
+    container_name: wordpress
+    volumes:
+      - ./config/php.conf.ini:/usr/local/etc/php/conf.d/php.ini
+      - ./wordpress:/var/www/html
+    environment:
+       WORDPRESS_DB_NAME: wpressname
+       WORDPRESS_TABLE_PREFIX: wp_
+       WORDPRESS_DB_HOST: IPRDS
+       WORDPRESS_DB_USER: wpressuser
+       WORDPRESS_DB_PASSWORD: wpresspass
+       WORDPRESS_CONFIG_EXTRA: |
+           define('FS_METHOD', 'direct');
+    restart: unless-stopped
+    ports:
+        - 80:80
+        - 443:443
+
+  wp-auto-config:
+    image: wpcli
+    build: ./
+    container_name: wp_autoconfig
+    entrypoint: sh -c "/wait && make -f /scripts/Makefile"
+    volumes:
+      - ./wordpress:/var/www/html
+    working_dir: /var/www/html
+    depends_on:
+      - wordpress
+    environment:
+      # Waiting for MySQL and wordpress -------------------
+      - WAIT_HOSTS=IPRDS:3306,wordpress:80
+      - WAIT_BEFORE_HOSTS=30
+      - WAIT_AFTER_HOSTS=15
+      - WAIT_HOSTS_TIMEOUT=300
+      - WAIT_SLEEP_INTERVAL=30
+      - WAIT_HOST_CONNECT_TIMEOUT=30
