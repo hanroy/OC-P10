@@ -5,13 +5,13 @@ configure:
 	@echo "�~Z~Y�~O Configuring Wordpress parameters..."
 
 	wp --allow-root core install \
-                --url=http://52.59.214.248/ \
+                --url=http://localhost/ \
                 --title=myblog \
                 --admin_user=admin \
                 --admin_password=wordpress \
-                --admin_email=h4nr0y@gmail.com
+                --admin_email=example@mail.com
 
-	wp --allow-root option update siteurl "http://52.59.214.248/"
+	wp --allow-root option update siteurl "http://localhost/"
 	wp --allow-root rewrite structure "/blog/%postname%/"
 	wp --allow-root plugin install wordpress-importer --activate
 	wp --allow-root plugin install amazon-web-services --activate
