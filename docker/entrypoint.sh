@@ -1,27 +1,24 @@
-#!/bin/bash
+#!/bin/sh
+set -euo pipefail
 
-echo "update os"
-sudo yum update -y
+# Based on wordpress:cli entrypoint
+# https://github.com/docker-library/wordpress/blob/master/php7.2/cli/docker-entrypoint.sh
 
-echo "install docker"
-sudo yum install docker -y
-sudo service docker start
-sudo systemctl enable docker
+# If the first arg is `--some-option` then execute wp-cli
+if [ "${1#-}" != "$1" ]; then
+	set -- wp "$@"
+fi
 
-echo "add ec2-user to the Docker users group"
-#Doing this allows you to run Docker commands without needing to invoke sudo every time.
-sudo usermod -a -G docker ec2-user
+# if our command is a valid wp-cli subcommand (say plugin), let's invoke it through wp-cli instead
+# (this allows for "docker run wordpress:cli help", etc)
+# documenation of the subcommand is shown
+if wp --path=/dev/null help "$1" > /dev/null 2>&1; then
+	set -- wp "$@"
+fi
 
-echo "download and apply the docker-compose package"
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-
-echo "Set the execution permissions docker-compose"
-sudo chmod +x /usr/local/bin/docker-compose
-
-echo "install wordpress"
-mkdir wordpress && cd wordpress
-sudo wget https://raw.githubusercontent.com/hanroy/OC-P10/master/docker/Dockerfile
-sudo https://raw.githubusercontent.com/hanroy/OC-P10/master/docker/docker-compose.yml
-docker-compose up -d
-
-
+# Execute aliases in the make file or directly the provided command
+if [ "$1" == "install" ] || [ "$1" == "configure" ]; then
+  make -f /scripts/Makefile $1
+else
+  exec "$@"
+fi
