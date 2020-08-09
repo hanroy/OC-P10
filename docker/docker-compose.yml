@@ -20,8 +20,8 @@ services:
                 'secret-access-key' => 'SECRETKEY',
            ) ) );
            define('FS_METHOD', 'direct');
-           #define( 'AWS_ACCESS_KEY_ID', 'ACCESSKEY');
-           #define( 'AWS_SECRET_ACCESS_KEY', 'SECRETKEY');
+           define( 'AWS_ACCESS_KEY_ID', 'ACCESSKEY');
+           define( 'AWS_SECRET_ACCESS_KEY', 'SECRETKEY');
            define( 'DISALLOW_FILE_MODS', true );
            define( 'WP_AUTO_UPDATE_CORE', false );
     restart: unless-stopped
