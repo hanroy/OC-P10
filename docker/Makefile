@@ -19,5 +19,6 @@ configure:
 	wp --allow-root plugin update --all
 	wp --allow-root theme update --all
 	wp --allow-root theme activate twentynineteen
+	wp --allow-root post delete 1 --force
 	wp --allow-root media import /scripts/1.png
 	wp --allow-root import /scripts/wpress.xml --authors=create
