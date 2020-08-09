@@ -9,12 +9,11 @@ RUN chmod +x /wait
 
 
 
-ADD Makefile entrypoint.sh wpress.xml /scripts/
+ADD Makefile entrypoint.sh wpress.xml 1.png /scripts/
 RUN chmod +x /scripts/entrypoint.sh
 
 RUN chown -R www-data:www-data /var/www/html
 
 
 ENTRYPOINT [ "/scripts/entrypoint.sh" ]
-#USER 33:33
 CMD ["wp", "shell"]
