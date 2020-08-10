@@ -1,0 +1,551 @@
+Description: >-
+  AWS CloudFormation Template WordPress_Multi_AZ in a docker container. This setup
+  installs a highly-available, scalable WordPress deployment using a multi-az
+  Amazon RDS database instance for storage. It demonstrates using the AWS
+  CloudFormation bootstrap scripts to deploy docker with fully installed WordPress. This
+  template creates : VPC, Application Load Balancer, AutoScaling, S3, RDS instance and replica.
+Parameters:
+  SSHKeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Default: wordpress
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  OperatorEMail:
+    Description: EMail address to notify if there are any scaling operations
+    Type: String
+    Default: royer.hanen@gmail.com
+    AllowedPattern: >-
+      ([a-zA-Z0-9_\-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)
+    ConstraintDescription: must be a valid email address.
+  vpcCidr:
+    Description: VPC CIDR block.
+    Type: String
+    Default: 10.200.0.0/16
+  PublicSubnet1CIDR:
+    Description: Public subnet 1 CIDR block.
+    Type: String
+    Default: 10.200.1.0/24
+  PublicSubnet2CIDR:
+    Description: Public subnet 2 CIDR block.
+    Type: String
+    Default: 10.200.2.0/24
+  PrivateSubnet1CIDR:
+    Description: Private subnet 1 CIDR block.
+    Type: String
+    Default: 10.200.3.0/24
+  DBClass:
+    Description: The database instance type
+    Type: String
+    Default: db.t2.micro
+    AllowedValues:
+      - db.t1.micro
+      - db.m1.small
+      - db.m1.medium
+      - db.t2.micro
+    ConstraintDescription: must select a valid database instance type.
+  DBName:
+    Default: wordpressdb
+    Description: The WordPress database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBUser:
+    NoEcho: 'true'
+    Description: The WordPress database admin account username
+    Type: String
+    Default: admin
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBPassword:
+    NoEcho: 'true'
+    Description: The WordPress database admin account password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+  MultiAZDatabase:
+    Description: Create Multi-AZ master database
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    ConstraintDescription: must be either true or false.
+  WebServerCapacity:
+    Default: '2'
+    Description: The initial number of WebServer instances
+    Type: Number
+    MinValue: '1'
+    MaxValue: '5'
+    ConstraintDescription: must be between 1 and 5 EC2 instances.
+  DBAllocatedStorage:
+    Default: '5'
+    Description: The size of the database (Gb)
+    Type: Number
+    MinValue: '5'
+    MaxValue: '21'
+    ConstraintDescription: must be between 5 and 21Gb.
+Mappings:
+  AWSInstanceType2Arch:
+    t1.micro:
+      Arch: PV64
+    t2.micro:
+      Arch: HVM64
+    t2.nano:
+      Arch: HVM64
+    t2.small:
+      Arch: HVM64
+  AWSRegionArch2AMI:
+    us-west-2:
+      HVM64: ami-067f5c3d5a99edc80
+    us-west-1:
+      HVM64: ami-05655c267c89566dd
+    eu-west-1:
+      HVM64: ami-07d9160fa81ccffb5
+    eu-central-1:
+      HVM64: ami-0c115dbd34c69a004
+Resources:
+  NotificationTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      Subscription:
+        - Endpoint: !Ref OperatorEMail
+          Protocol: email
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref vpcCidr
+      InstanceTenancy: default
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-MyVPC'
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Ref PublicSubnet1CIDR
+      AvailabilityZone: !Select 
+        - 0
+        - !GetAZs ''
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicSub-A'
+  PublicSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Ref PublicSubnet2CIDR
+      AvailabilityZone: !Select 
+        - 1
+        - !GetAZs ''
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicSub-B'
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      AvailabilityZone: !Select 
+        - 2
+        - !GetAZs ''
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PrivateSub-C'
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-InternetGateway'
+  InternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicRouteTable'
+  PrivateRouteTable1:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PrivateRouteTable'
+  DefaultPublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn:
+      - InternetGateway
+      - PublicRouteTable
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+  PrivateSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+  NetworkAcl:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+  SubnetNetworkAclAssociationA:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      NetworkAclId: !Ref NetworkAcl
+  SubnetNetworkAclAssociationB:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      NetworkAclId: !Ref NetworkAcl
+  NetworkAclEntryIngress:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      RuleNumber: '100'
+      Protocol: '-1'
+      RuleAction: allow
+      Egress: 'false'
+      CidrBlock: 0.0.0.0/0
+  NetworkAclEntryEgress:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      RuleNumber: '100'
+      Protocol: '-1'
+      RuleAction: allow
+      Egress: 'true'
+      CidrBlock: 0.0.0.0/0
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref 'AWS::StackName'
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+    DeletionPolicy: Retain
+  IAMUser:
+    Type: 'AWS::IAM::User'
+    Properties:
+      Policies:
+        - PolicyName: bucket-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - s3:*
+              Resource: "*"
+  IAMUserCredentials:
+    Type: 'AWS::IAM::AccessKey'
+    Properties:
+      UserName: !Ref IAMUser
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    DependsOn:
+      - PublicSubnet1
+      - PublicSubnet2
+      - InternetGatewayAttachment
+    Properties:
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref WebServerSecurityGroup
+  ALBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: '80'
+      Protocol: HTTP
+  ALBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    DependsOn:
+      - InternetGatewayAttachment
+    Properties:
+      HealthCheckPath: /wordpress/wp-admin/install.php
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: !Ref VPC
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: 'true'
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: '30'
+  WebServerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    DependsOn:
+      - InternetGatewayAttachment
+    Properties:
+      GroupDescription: >-
+        Enable HTTP access via port 80 locked down to the load balancer + SSH
+        access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref SSHLocation
+      VpcId: !Ref VPC
+  WebServerScaleUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerGroup
+      Cooldown: '60'
+      ScalingAdjustment: 1
+  WebServerScaleDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerGroup
+      Cooldown: '60'
+      ScalingAdjustment: -1
+  CPUAlarmHigh:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: Scale-up if CPU > 90% for 10 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 90
+      AlarmActions:
+        - !Ref WebServerScaleUpPolicy
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerGroup
+      ComparisonOperator: GreaterThanThreshold
+  CPUAlarmLow:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: Scale-down if CPU < 70% for 10 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 70
+      AlarmActions:
+        - !Ref WebServerScaleDownPolicy
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerGroup
+      ComparisonOperator: LessThanThreshold
+  DBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS Database
+      SubnetIds:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+  DBEC2SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Open database for access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          SourceSecurityGroupId: !Ref WebServerSecurityGroup
+      VpcId: !Ref VPC
+  MasterDB:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBName: !Ref DBName
+      AllocatedStorage: !Ref DBAllocatedStorage
+      DBInstanceClass: !Ref DBClass
+      Engine: MySQL
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      StorageType: gp2
+      PubliclyAccessible: false
+      AvailabilityZone: !Select 
+        - 0
+        - !GetAZs ''
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-MasterDatabase'
+      VPCSecurityGroups:
+        - !GetAtt 
+          - DBEC2SecurityGroup
+          - GroupId
+    DeletionPolicy: Snapshot
+
+  ReplicaDB:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      SourceDBInstanceIdentifier: !Ref MasterDB
+      DBInstanceClass: !Ref DBInstanceClass
+      AvailabilityZone: !Select 
+        - 1
+        - !GetAZs ''
+      Tags:
+        - Key: Name
+          Value: Read Replica Database
+  LaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    DependsOn: MasterDB
+    Properties:
+      EbsOptimized: false
+      KeyName: !Ref SSHKeyName
+      ImageId: !FindInMap 
+        - AWSRegionArch2AMI
+        - !Ref 'AWS::Region'
+        - !FindInMap 
+          - AWSInstanceType2Arch
+          - !Ref InstanceType
+          - Arch
+      SecurityGroups:
+        - !Ref WebServerSecurityGroup
+      InstanceType: !Ref InstanceType
+      AssociatePublicIpAddress: true
+      UserData: !Base64 
+        'Fn::Sub': >
+          #!/bin/bash
+
+          cd /root/
+
+          yum update -y
+
+          yum install docker git -y
+
+          service docker start
+
+          systemctl enable docker
+
+          mkdir -p /root/wordpress && cd /root/wordpress 
+
+          curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+          chmod +x /usr/local/bin/docker-compose
+
+          git clone https://github.com/hanroy/OC-P10.git
+
+          cd /root/wordpress/OC-P10/docker
+
+          sed -i 's/DbName/${DBName}/g' /root/wordpress/OC-P10/docker/docker-compose.yml
+
+          sed -i 's/DbUSER/${DBUser}/g' /root/wordpress/OC-P10/docker/docker-compose.yml    
+
+          sed -i 's/DbPASSWORD/${DBPassword}/g' /root/wordpress/OC-P10/docker/docker-compose.yml
+
+          sed -i 's/DbHOST/${MasterDB.Endpoint.Address}/g' /root/wordpress/OC-P10/docker/docker-compose.yml
+
+          sed -i 's/ACCESSKEY/${IAMUserCredentials}/g' /root/wordpress/OC-P10/docker/docker-compose.yml
+
+          sed -i 's/SECRETKEY/${IAMUserCredentials.SecretAccessKey}/g' /root/wordpress/OC-P10/docker/docker-compose.yml
+
+          sed -i 's/localhost/${ApplicationLoadBalancer.DNSName}/g' /root/wordpress/OC-P10/docker/Makefile
+
+          docker-compose up -d --build
+
+  WebServerGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    DependsOn:
+      - ApplicationLoadBalancer
+      - PublicSubnet1
+      - PublicSubnet2
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: '2'
+      MaxSize: '3'
+      DesiredCapacity: !Ref WebServerCapacity
+      TargetGroupARNs:
+        - !Ref ALBTargetGroup
+      NotificationConfigurations:
+        - TopicARN: !Ref NotificationTopic
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+        Count: 0
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT5M
+        WaitOnResourceSignals: true
+Outputs:
+  URL:
+    Value: !Join 
+      - ''
+      - - 'http://'
+        - !GetAtt 
+          - ApplicationLoadBalancer
+          - DNSName
+        - /
+    Description: Wordpress URL
+
