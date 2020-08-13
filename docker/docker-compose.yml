@@ -18,6 +18,19 @@ services:
            define( 'AWS_SECRET_ACCESS_KEY', 'SECRETKEY');
            define( 'DISALLOW_FILE_MODS', true );
            define( 'WP_AUTO_UPDATE_CORE', false );
+           define( 'AS3CF_SETTINGS', serialize( array(
+            // Storage Provider ('aws', 'do', 'gcp')
+           'provider' => 'aws',
+           // Bucket to upload files to
+           'bucket' => 'mybucket',
+           // Automatically copy files to bucket on upload
+           'copy-to-s3' => true,
+           // Enable object prefix, useful if you use your bucket for other files
+           'enable-object-prefix' => true,
+           // Object prefix to use if 'enable-object-prefix' is 'true'
+           'object-prefix' => 'wp-content/uploads/',
+           ) ) );
+          
     restart: unless-stopped
     ports:
         - 80:80
