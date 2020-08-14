@@ -22,7 +22,11 @@ services:
             // Storage Provider ('aws', 'do', 'gcp')
            'provider' => 'aws',
            // Bucket to upload files to
+<<<<<<< HEAD
            'bucket' => 'letstest',
+=======
+           'bucket' => 'mybucket',
+>>>>>>> e1ef9557bb28eb94d4ffd2e2e5d7e190f18e7f4d
            // Automatically copy files to bucket on upload
            'copy-to-s3' => true,
            // Enable object prefix, useful if you use your bucket for other files
@@ -30,6 +34,10 @@ services:
            // Object prefix to use if 'enable-object-prefix' is 'true'
            'object-prefix' => 'wp-content/uploads/',
            ) ) );
+<<<<<<< HEAD
+=======
+          
+>>>>>>> e1ef9557bb28eb94d4ffd2e2e5d7e190f18e7f4d
     restart: unless-stopped
     ports:
         - 80:80
